@@ -1,0 +1,116 @@
+use std::net::{TcpStream, TcpListener};
+use std::io::{Write, BufReader, BufRead};
+use tauri::command;
+use std::thread;
+
+struct AppState {
+    stream: Option<TcpStream>,
+}
+
+static mut APP_STATE: AppState = AppState { stream: None };
+
+#[command]
+fn connect_to_server(address: String, port: u16) -> Result<(), String> {
+    let server_address = format!("{}:{}", address, port);
+    match TcpStream::connect(&server_address) {
+        Ok(stream) => {
+            unsafe {
+                APP_STATE.stream = Some(stream);
+            }
+            Ok(())
+        }
+        Err(e) => Err(format!("Error al conectar al servidor: {}", e)),
+    }
+}
+
+#[command]
+fn send_message_to_server(message: String) -> Result<(), String> {
+    unsafe {
+        if let Some(ref mut stream) = APP_STATE.stream {
+            if let Err(e) = stream.write_all(format!("{}\n", message).as_bytes()) {
+                return Err(format!("Error al enviar mensaje: {}", e));
+            }
+        } else {
+            return Err("No está conectado al servidor.".to_string());
+        }
+    }
+    Ok(())
+}
+
+
+
+fn main() {
+  tauri::Builder::default()
+      .invoke_handler(tauri::generate_handler![
+          send_message_to_server,
+          connect_to_server // Agrega esta línea
+      ])
+      .run(tauri::generate_context!())
+      .expect("error while running tauri application");
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+de svelte 
+
+
+
+
+<script lang="ts">
+    import { onMount } from 'svelte';
+    import { invoke } from '@tauri-apps/api';
+
+    let message = '';
+    let messages: string[] = [];
+
+    onMount(async () => {
+        try {
+            await invoke('connect_to_server', { address: 'localhost', port: 8080 });
+        } catch (error) {
+            console.error('Error al conectar al servidor:', error);
+        }
+    });
+
+    const sendChatMessage = async () => {
+        try {
+            await invoke('send_message_to_server', { message });
+            messages.push(message);
+            message = '';
+        } catch (error) {
+            console.error('Error al enviar el mensaje:', error);
+        }
+    };
+
+    const handleKeyPress = (event: KeyboardEvent) => {
+        if (event.key === 'Enter') {
+            sendChatMessage();
+        }
+    };
+</script>
+
+
+
+<h1>Chat</h1>
+<input type="text" bind:value={message} placeholder="Escribe un mensaje..." on:keypress={handleKeyPress} />
+<button on:click={sendChatMessage}>Enviar</button>
+
+<ul>
+    {#each messages as msg}
+        <li>{msg}</li>
+    {/each}
+</ul>
+
